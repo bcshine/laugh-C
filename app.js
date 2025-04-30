@@ -4,6 +4,7 @@ const canvas = document.getElementById('face-points');
 const ctx = canvas.getContext('2d');
 const scoreValue = document.getElementById('score-value');
 const message = document.getElementById('message');
+const messageCamera = document.getElementById('message-camera');
 const videoWrapper = document.getElementById('video-wrapper');
 
 // 앱 상태 변수
@@ -74,17 +75,17 @@ async function init() {
                 startFaceDetection();
             }
             
-            message.innerText = '얼굴을 카메라에 맞춰주세요';
+            messageCamera.innerText = '얼굴을 카메라에 맞춰주세요';
             return;
         }
         
         // 메시지 요소 확인
-        if (!message) {
-            console.error("메시지 요소를 찾을 수 없습니다");
+        if (!messageCamera) {
+            console.error("카메라 메시지 요소를 찾을 수 없습니다");
             return;
         }
         
-        message.innerText = '모델을 로딩하는 중...';
+        messageCamera.innerText = '모델을 로딩하는 중...';
         
         // 모델 URL (CDN에서 모델 로드)
         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
@@ -97,13 +98,13 @@ async function init() {
             faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
         ]).catch(err => {
             console.error("모델 로드 중 오류:", err);
-            message.innerText = '모델 로드 중 오류가 발생했습니다: ' + err.message;
+            messageCamera.innerText = '모델 로드 중 오류가 발생했습니다: ' + err.message;
             throw err;
         });
         
         console.log("Face-API.js 모델 로딩 완료");
         
-        message.innerText = '카메라 시작 중...';
+        messageCamera.innerText = '카메라 시작 중...';
         
         // 카메라 초기화
         await setupCamera();
@@ -112,10 +113,10 @@ async function init() {
         isRunning = true;
         startFaceDetection();
         
-        message.innerText = '얼굴을 카메라에 맞춰주세요';
+        messageCamera.innerText = '얼굴을 카메라에 맞춰주세요';
     } catch (error) {
         console.error('초기화 실패:', error);
-        message.innerText = '카메라 접근에 실패했습니다: ' + error.message;
+        messageCamera.innerText = '카메라 접근에 실패했습니다: ' + error.message;
         
         // 재시도 버튼 표시
         const retryButton = document.getElementById('retry-camera-button');
@@ -232,13 +233,13 @@ async function detectFace() {
             
             analyzeSmile(resizedDetections);
         } else {
-            message.innerText = '얼굴이 감지되지 않았습니다';
+            messageCamera.innerText = '얼굴이 감지되지 않았습니다';
         }
         
         requestAnimationFrame(detectFace);
     } catch (error) {
         console.error('얼굴 감지 오류:', error);
-        message.innerText = '얼굴 감지 중 오류가 발생했습니다';
+        messageCamera.innerText = '얼굴 감지 중 오류가 발생했습니다';
         setTimeout(() => {
             if (isRunning) detectFace();
         }, 2000); // 에러 발생 시 2초 후 재시도
