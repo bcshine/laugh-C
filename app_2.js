@@ -92,11 +92,10 @@ async function init() {
         
         console.log("Face-API.js 모델 로딩 시작");
         
-        // 모델 로드 - 표정 인식 모델 추가
+        // 모델 로드
         await Promise.all([
             faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL) // 표정 인식 모델 추가
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
         ]).catch(err => {
             console.error("모델 로드 중 오류:", err);
             messageCamera.innerText = '모델 로드 중 오류가 발생했습니다: ' + err.message;
@@ -224,8 +223,7 @@ async function detectFace() {
                 inputSize: isMobile ? 224 : 320,
                 scoreThreshold: 0.5
             })
-        ).withFaceLandmarks()
-         .withFaceExpressions(); // 표정 인식 추가
+        ).withFaceLandmarks();
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
@@ -233,8 +231,7 @@ async function detectFace() {
             const displaySize = { width: canvas.width, height: canvas.height };
             const resizedDetections = faceapi.resizeResults(detections, displaySize);
             
-            // 표정 인식을 활용한 웃음/찡그림 분석하기
-            analyzeSmileWithExpressions(resizedDetections);
+            analyzeSmile(resizedDetections);
         } else {
             messageCamera.innerText = '얼굴이 감지되지 않았습니다';
         }
@@ -259,40 +256,8 @@ function drawPoints(points, radius, color) {
     }
 }
 
-// 표정 인식을 활용한 웃음/찡그림 분석하기
-function analyzeSmileWithExpressions(detections) {
-    // 표정 인식 결과 가져오기
-    const expressions = detections.expressions;
-    console.log('표정 인식 결과:', expressions);
-    
-    // 주요 표정 값 추출 (0~1 사이 값)
-    const happyScore = expressions.happy;      // 행복/웃음
-    const sadScore = expressions.sad;          // 슬픔
-    const angryScore = expressions.angry;      // 화남
-    const surprisedScore = expressions.surprised; // 놀람
-    const neutralScore = expressions.neutral;  // 중립적
-    
-    // 디버깅 정보 출력
-    console.log('웃음 점수:', (happyScore * 100).toFixed(2));
-    console.log('슬픔 점수:', (sadScore * 100).toFixed(2));
-    console.log('화남 점수:', (angryScore * 100).toFixed(2));
-    
-    // 기본 점수 계산 (웃음은 긍정적, 슬픔/화남은 부정적)
-    let baseScore = 80; // 기본 점수 (중립)
-    
-    // 행복 점수에 따른 추가 점수 (최대 17점)
-    const happyBonus = Math.round(happyScore * 17);
-    
-    // 부정적 표정에 따른 감점 (최대 -20점)
-    const negativeScore = Math.round((sadScore + angryScore) * 20);
-    
-    // 최종 점수 계산 (긍정 보너스 더하고 부정 점수 빼기)
-    let smileScore = baseScore + happyBonus - negativeScore;
-    
-    // 점수 범위 제한 (60점 ~ 97점)
-    smileScore = Math.max(60, Math.min(97, smileScore));
-    
-    // 이전 랜드마크 기반 분석과의 혼합을 위해 입 모양도 분석
+// 웃음/찡그림 분석하기
+function analyzeSmile(detections) {
     const mouth = detections.landmarks.getMouth();
     
     // 입 모양 분석을 위한 주요 포인트
@@ -301,21 +266,60 @@ function analyzeSmileWithExpressions(detections) {
     const leftCorner = mouth[0]; // 왼쪽 입꼬리
     const rightCorner = mouth[6];// 오른쪽 입꼬리
     
+    // 입 크기 계산
+    const mouthHeight = Math.abs(bottomLip.y - topLip.y);
+    const mouthWidth = Math.abs(rightCorner.x - leftCorner.x);
+    const mouthRatio = mouthWidth / mouthHeight;
+    
     // 입꼬리 위치 분석 (U자형 vs 역U자형)
     const lipCenter = (topLip.y + bottomLip.y) / 2;
     const cornerHeight = (leftCorner.y + rightCorner.y) / 2;
-    const lipCurve = (lipCenter - cornerHeight) / Math.abs(bottomLip.y - topLip.y);
-    
-    // 입 곡률에 따른 미세 조정 (최대 ±5점)
-    if (lipCurve > 0.1) { // 입꼬리가 올라간 경우 (웃는 표정)
-        smileScore += 3;
-    } else if (lipCurve < -0.1) { // 입꼬리가 내려간 경우 (찡그린 표정)
-        smileScore -= 5;
+    const lipCurve = (lipCenter - cornerHeight) / mouthHeight; // 정규화된 곡률
+
+    // 입술 두께 변화 감지 (찡그림 시 입술이 얇아짐)
+    const lipThickness = mouthHeight / mouthWidth;
+
+    // 디버깅 정보 출력
+    console.log('입 비율:', mouthRatio.toFixed(2));
+    console.log('입꼬리 곡률:', lipCurve.toFixed(2));
+    console.log('입술 두께:', lipThickness.toFixed(2));
+
+    // 점수 계산
+    let baseScore = 80; // 기본 점수
+    let smileScore = baseScore;
+    let scoreAdjustment = 0;
+
+    // 웃는 표정 (U자형, 입꼬리가 올라감)
+    if (lipCurve > 0) {
+        if (lipCurve > 0.4 && mouthRatio > 2.0) {
+            scoreAdjustment = 15; // 활짝 웃는 얼굴 (95점)
+        }
+        else if (lipCurve > 0.25 && mouthRatio > 1.7) {
+            scoreAdjustment = 10; // 기분 좋게 웃는 얼굴 (90점)
+        }
+        else if (lipCurve > 0.1) {
+            scoreAdjustment = 5;  // 살짝 웃는 얼굴 (85점)
+        }
     }
-    
-    // 최종 점수 범위 재확인
-    smileScore = Math.max(60, Math.min(97, smileScore));
-    
+    // 찡그린 표정 (역U자형, 입꼬리가 내려감)
+    else {
+        if (lipCurve < -0.2 && (mouthRatio < 1.3 || lipThickness < 0.3)) {
+            scoreAdjustment = -20; // 많이 찡그린 얼굴 (60점)
+        }
+        else if (lipCurve < -0.15 && mouthRatio < 1.5) {
+            scoreAdjustment = -15; // 조금 찡그린 얼굴 (65점)
+        }
+        else if (lipCurve < -0.1) {
+            scoreAdjustment = -10; // 살짝 찡그린 얼굴 (70점)
+        }
+        else if (lipCurve < -0.05) {
+            scoreAdjustment = -5;  // 아주 살짝 찡그린 얼굴 (75점)
+        }
+    }
+
+    // 최종 점수 계산
+    smileScore = Math.max(60, Math.min(95, baseScore + scoreAdjustment));
+
     // 점수 변화를 더 민감하게 조정 (이전 가중치 조정)
     currentScore = currentScore * 0.5 + smileScore * 0.5;
     
@@ -334,9 +338,7 @@ function updateMessage(score) {
     message.style.fontWeight = 'bold';
     message.style.color = '#3498db';  // 메시지도 파란색으로 통일
     
-    if (roundedScore >= 97) {
-        message.innerText = '완벽한 웃음이에요! 😊😊';
-    } else if (roundedScore >= 95) {
+    if (roundedScore >= 95) {
         message.innerText = '활짝 웃는 얼굴이에요! 😊';
     } else if (roundedScore >= 90) {
         message.innerText = '기분 좋게 웃고 있어요! 😄';
