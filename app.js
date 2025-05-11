@@ -98,7 +98,7 @@ async function init() {
             faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
             faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL) // 표정 인식 모델 추가
         ]).catch(err => {
-            console.error("모델 로드 중 오류:", err);
+            console.error("모델 로드 중, 오류:", err);
             messageCamera.innerText = '모델 로드 중 오류가 발생했습니다: ' + err.message;
             throw err;
         });
@@ -148,14 +148,14 @@ async function setupCamera() {
         
         // 모바일 기기별 특수 설정 적용
         if (isIOS) {
-            console.log("iOS 특수 설정 적용");
+            console.log("iOS, 특수 설정 적용");
             constraints.video = {
                 facingMode: 'user',
                 width: { min: 320, ideal: 640, max: 1280 },
                 height: { min: 240, ideal: 480, max: 720 }
             };
         } else if (isAndroid) {
-            console.log("안드로이드 특수 설정 적용");
+            console.log("안드로이드, 특수 설정 적용");
             constraints.video = {
                 facingMode: 'user',
                 width: { min: 320, ideal: 640, max: 1280 },
